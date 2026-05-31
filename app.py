@@ -11,6 +11,16 @@ from werkzeug.exceptions import HTTPException
 
 
 app = Flask(__name__)
+FRONTEND_ORIGIN = os.getenv("FRONTEND_ORIGIN", "*")
+
+@app.after_request
+def add_cors_headers(response):
+    response.headers["Access-Control-Allow-Origin"] = FRONTEND_ORIGIN
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+    return response
+
+
 
 API_KEY = os.getenv("API_KEY")
 BASE_URL = os.getenv("BRIXHUB_BASE_URL", "https://brixhub.net/api/v1").rstrip("/")
