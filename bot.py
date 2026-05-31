@@ -871,4 +871,4 @@ async def on_ready():
 if not TOKEN:
     raise RuntimeError("DISCORD_TOKEN manquant")
 
-bot.run(TOKEN)
+bot.run(TOKEN) 
