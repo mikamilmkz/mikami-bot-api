@@ -11,38 +11,49 @@ from discord.ui import Button, Modal, TextInput, View
 
 TOKEN = os.getenv("DISCORD_TOKEN")
 
-SEARCH_CHANNEL_ID = 1507891823031619746
-RESULTS_CHANNEL_ID = 1507891868489482431
+SEARCH_CHANNEL_ID = int(os.getenv("SEARCH_CHANNEL_ID", "1507891823031619746"))
+RESULTS_CHANNEL_ID = int(os.getenv("RESULTS_CHANNEL_ID", "1507891868489482431"))
+ADMIN_LOG_CHANNEL_ID = int(os.getenv("ADMIN_LOG_CHANNEL_ID", "1509730558685483108"))
 
-
-def env_int(name, default):
-    try:
-        return int(os.getenv(name, str(default)))
-    except Exception:
-        return default
-
-
-ADMIN_LOG_CHANNEL_ID = 1509730558685483108
-
-BASE_URL = "https://mikami-justice.onrender.com"
+BASE_URL = os.getenv("BASE_URL", "https://mikami-justice.onrender.com").rstrip("/")
 API_MULTI = f"{BASE_URL}/api/multisearch"
 LOGO_URL = f"{BASE_URL}/static/logo.png"
 BANNER_URL = f"{BASE_URL}/static/blackbox_banner.png"
 BANNER_PATH = os.getenv("BANNER_PATH", "static/blackbox_banner.png")
 BANNER_ATTACHMENT_NAME = "blackbox_banner.png"
 
+DAILY_SEARCH_LIMIT = int(os.getenv("DAILY_SEARCH_LIMIT", "30"))
 RESULTS_PER_PAGE = 2
 
 intents = discord.Intents.default()
 bot = commands.Bot(command_prefix="!", intents=intents)
 
+# Simple daily search tracking
+_user_searches = {}
+
+
+def reset_daily_searches():
+    """Reset search counts daily."""
+    while True:
+        time.sleep(86400)
+        _user_searches.clear()
+
+
+def can_search(user_id):
+    """Check if user has searches remaining today."""
+    today = time.strftime("%Y-%m-%d")
+    key = f"{user_id}:{today}"
+    current_count = _user_searches.get(key, 0)
+    if current_count >= DAILY_SEARCH_LIMIT:
+        return False, DAILY_SEARCH_LIMIT - current_count
+    _user_searches[key] = current_count + 1
+    return True, DAILY_SEARCH_LIMIT - current_count - 1
+
 
 def safe_text(text, limit=1800):
     text = str(text)
-
     if len(text) > limit:
         return text[:limit] + "\n...[coupé]"
-
     return text
 
 
@@ -52,17 +63,72 @@ def keep_alive():
             requests.get(f"{BASE_URL}/health", timeout=10)
         except Exception:
             pass
-
         time.sleep(300)
 
 
 def post_api(payload):
-    response = requests.post(
-        API_MULTI,
-        json=payload,
-        timeout=60,
-    )
-    return response.json()
+    """
+    Call the API with comprehensive error handling.
+    Prevents JSON parsing crashes on non-JSON or empty responses.
+    """
+    try:
+        response = requests.post(
+            API_MULTI,
+            json=payload,
+            timeout=60,
+        )
+
+        raw_text = response.text or ""
+
+        # Check for empty response
+        if not raw_text.strip():
+            return {
+                "type": "error",
+                "message": f"Réponse vide de l'API. HTTP {response.status_code}",
+            }
+
+        # Try to parse JSON
+        try:
+            data = response.json()
+        except ValueError:
+            return {
+                "type": "error",
+                "message": (
+                    f"Réponse API non JSON. HTTP {response.status_code}. "
+                    f"Début réponse : {raw_text[:300]}"
+                ),
+            }
+
+        # Check HTTP status codes
+        if response.status_code >= 400:
+            return {
+                "type": "error",
+                "message": (
+                    data.get("message")
+                    or data.get("error")
+                    or f"Erreur API HTTP {response.status_code}"
+                ),
+            }
+
+        return data
+
+    except requests.exceptions.Timeout:
+        return {
+            "type": "error",
+            "message": "L'API met trop longtemps à répondre. Réessaie dans quelques secondes.",
+        }
+
+    except requests.exceptions.RequestException as e:
+        return {
+            "type": "error",
+            "message": f"Erreur réseau API : {str(e)[:200]}",
+        }
+
+    except Exception as e:
+        return {
+            "type": "error",
+            "message": f"Erreur inconnue API : {str(e)[:200]}",
+        }
 
 
 async def call_api(payload):
@@ -118,26 +184,20 @@ def get_confidence(item):
 def color_from_confidence(score, default):
     if score >= 70:
         return 0x57F287
-
     if score >= 40:
         return 0xFEE75C
-
     if score > 0:
         return 0xED4245
-
     return default
 
 
 def confidence_label(score):
     if score >= 70:
         return " Haute confiance"
-
     if score >= 40:
         return " Confiance moyenne"
-
     if score > 0:
         return " Faible confiance"
-
     return "⚫ Confiance inconnue"
 
 
@@ -161,26 +221,21 @@ class ResultPages(View):
 
     def update_buttons(self):
         total_pages = self.total_pages()
-
         for child in self.children:
             if child.custom_id == "prev_result":
                 child.disabled = self.page <= 0
-
             if child.custom_id == "next_result":
                 child.disabled = self.page >= total_pages - 1
 
     def make_embed(self):
         self.update_buttons()
-
         start, end, page_results = self.page_slice()
         best_confidence = max([get_confidence(item) for item in page_results] or [0])
 
         blocks = []
-
         for index, item in enumerate(page_results, start=start + 1):
             confidence = get_confidence(item)
             person_text = safe_text(format_person(item), 1500)
-
             blocks.append(
                 f"RÉSULTAT {index}\n"
                 f"{person_text}\n"
@@ -209,7 +264,6 @@ class ResultPages(View):
         )
 
         embed.set_thumbnail(url=LOGO_URL)
-
         embed.set_footer(
             text="BLACKBOX • Résultats privés",
             icon_url=LOGO_URL,
@@ -225,7 +279,6 @@ class ResultPages(View):
     async def previous(self, interaction: discord.Interaction, button: Button):
         if self.page > 0:
             self.page -= 1
-
         await interaction.response.edit_message(
             embed=self.make_embed(),
             view=self,
@@ -239,7 +292,6 @@ class ResultPages(View):
     async def next(self, interaction: discord.Interaction, button: Button):
         if self.page < self.total_pages() - 1:
             self.page += 1
-
         await interaction.response.edit_message(
             embed=self.make_embed(),
             view=self,
@@ -248,10 +300,8 @@ class ResultPages(View):
 
 async def get_admin_log_channel():
     channel = bot.get_channel(ADMIN_LOG_CHANNEL_ID)
-
     if channel:
         return channel
-
     try:
         return await bot.fetch_channel(ADMIN_LOG_CHANNEL_ID)
     except Exception:
@@ -282,7 +332,6 @@ def payload_fields(payload):
     for key, value in payload.items():
         if key in ignored or value in [None, ""]:
             continue
-
         fields.append(labels.get(key, key))
 
     return ", ".join(dict.fromkeys(fields)) or "aucun champ"
@@ -290,41 +339,31 @@ def payload_fields(payload):
 
 def search_mode_label(payload):
     mode = payload.get("search_mode")
-
     if mode == "flexible_only":
         return "Flexible direct"
-
     if mode == "phone_exact":
         return "Exact téléphone"
-
     if payload.get("flexible") is False:
         return "Exact"
-
     return "Intelligent"
 
 
 def outcome_label(data, total, error=None):
     if error:
         return "❌ Erreur"
-
     if not isinstance(data, dict):
         return "⚠️ Réponse invalide"
-
     if data.get("type") == "error":
         return "❌ Erreur API"
-
     if data.get("type") == "raw":
         if total and total > 0:
             return "✅ Résultat trouvé"
-
         return "🔎 Aucun résultat"
-
     return "⚠️ Réponse inattendue"
 
 
 async def log_admin_search(user, search_type, payload, total, elapsed_ms, data=None, error=None):
     channel = await get_admin_log_channel()
-
     if not channel:
         return
 
@@ -397,7 +436,6 @@ async def log_admin_search(user, search_type, payload, total, elapsed_ms, data=N
 
 async def log_public_search(user, search_type, total, data=None, error=None):
     channel = bot.get_channel(RESULTS_CHANNEL_ID)
-
     if not channel:
         try:
             channel = await bot.fetch_channel(RESULTS_CHANNEL_ID)
@@ -496,6 +534,15 @@ async def send_result(interaction, data, title, color):
 
 
 async def execute_search(interaction, payload, title, color, search_type):
+    # Check daily search limit
+    can_search_now, remaining = can_search(interaction.user.id)
+    if not can_search_now:
+        await interaction.followup.send(
+            f"⚠️ Limite quotidienne atteinte. Reviens demain.",
+            ephemeral=True,
+        )
+        return
+
     start_time = time.perf_counter()
 
     try:
@@ -735,20 +782,18 @@ async def open_modal_safely(interaction: discord.Interaction, modal: Modal):
             ephemeral=True,
         )
     except discord.NotFound:
-        # Discord renvoie souvent 10062 quand l'interaction a expiré
-        # ou si deux instances du bot essaient de répondre au même clic.
         print("Interaction expirée ou déjà consommée avant l'ouverture du modal.")
     except discord.HTTPException as e:
         print(f"Erreur Discord pendant l'ouverture du modal : {e}")
         try:
             if not interaction.response.is_done():
                 await interaction.response.send_message(
-                    "⚠️ Impossible d’ouvrir le formulaire. Réessaie dans quelques secondes.",
+                    "⚠️ Impossible d'ouvrir le formulaire. Réessaie dans quelques secondes.",
                     ephemeral=True,
                 )
             else:
                 await interaction.followup.send(
-                    "⚠️ Impossible d’ouvrir le formulaire. Réessaie dans quelques secondes.",
+                    "⚠️ Impossible d'ouvrir le formulaire. Réessaie dans quelques secondes.",
                     ephemeral=True,
                 )
         except Exception:
@@ -867,8 +912,13 @@ async def on_ready():
         daemon=True,
     ).start()
 
+    threading.Thread(
+        target=reset_daily_searches,
+        daemon=True,
+    ).start()
+
 
 if not TOKEN:
     raise RuntimeError("DISCORD_TOKEN manquant")
 
-bot.run(TOKEN) 
+bot.run(TOKEN)
