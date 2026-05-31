@@ -763,25 +763,25 @@ def extract_brixhub_error(response):
             message = body_text[:160]
 
     if response.status_code == 400:
-        return "Paramètres refusés par Brixhub. La recherche a été nettoyée pour éviter les champs non supportés.", error_type
+        return "Paramètres refusés par BLACKBOX. La recherche a été nettoyée automatiquement.", error_type
 
     if response.status_code == 401:
-        return "Clé API Brixhub invalide, manquante ou expirée.", error_type
+        return "Configuration BLACKBOX invalide ou indisponible.", error_type
 
     if response.status_code == 403:
         if error_type == "plan_limited":
             return "Pagination ou fonctionnalité non disponible avec le plan API actuel.", error_type
-        return message or "Accès refusé par Brixhub.", error_type
+        return message or "Accès refusé par BLACKBOX.", error_type
 
     if response.status_code == 429:
         if error_type == "quota_exceeded":
-            return "Quota journalier Brixhub dépassé. Il faut attendre la réinitialisation.", error_type
-        return "Trop de recherches envoyées à Brixhub. Le bot ralentit automatiquement.", error_type
+            return "Quota journalier BLACKBOX dépassé. Il faut attendre la réinitialisation.", error_type
+        return "Trop de recherches envoyées à BLACKBOX. Le système ralentit automatiquement.", error_type
 
     if response.status_code in [500, 502, 503, 504]:
-        return "Brixhub répond temporairement mal. Réessaie dans quelques instants.", error_type
+        return "BLACKBOX répond temporairement mal. Réessaie dans quelques instants.", error_type
 
-    return message or f"Erreur Brixhub HTTP {response.status_code}.", error_type
+    return message or f"Erreur BLACKBOX HTTP {response.status_code}.", error_type
 
 
 def call_brixhub(payload, timeout=35):
@@ -801,7 +801,7 @@ def call_brixhub(payload, timeout=35):
         wait_seconds = max(1, int(_rate_limited_until - now))
         return {
             "ok": False,
-            "error": f"Brixhub limite temporairement les recherches. Réessaie dans {wait_seconds}s.",
+            "error": f"BLACKBOX limite temporairement les recherches. Réessaie dans {wait_seconds}s.",
             "rate_limited": True,
         }, 429
 
@@ -839,17 +839,17 @@ def call_brixhub(payload, timeout=35):
         except ValueError:
             return {
                 "ok": False,
-                "error": "Brixhub n'a pas renvoyé du JSON valide. Vérifie le User-Agent ou l'état Cloudflare.",
+                "error": "BLACKBOX n'a pas renvoyé une réponse valide. Réessaie dans quelques instants.",
             }, 502
 
         save_cached_brixhub_response(payload, result)
         return {"ok": True, "data": result}, 200
 
     except requests.exceptions.Timeout:
-        return {"ok": False, "error": "API Brixhub trop lente, réessaie dans quelques secondes."}, 504
+        return {"ok": False, "error": "BLACKBOX met trop longtemps à répondre. Réessaie dans quelques secondes."}, 504
 
     except requests.exceptions.RequestException as e:
-        return {"ok": False, "error": f"Erreur réseau API : {str(e)}"}, 502
+        return {"ok": False, "error": f"Erreur réseau BLACKBOX : {str(e)}"}, 502
 
     except Exception as e:
         return {"ok": False, "error": str(e)}, 500

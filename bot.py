@@ -121,7 +121,7 @@ def post_api(payload):
     except requests.exceptions.RequestException as e:
         return {
             "type": "error",
-            "message": f"Erreur réseau API : {str(e)[:200]}",
+            "message": f"Erreur réseau BLACKBOX : {str(e)[:200]}",
         }
 
     except Exception as e:
