@@ -49,11 +49,7 @@ INTERNAL_PAYLOAD_KEYS = {"search_mode", "force_flexible", "mode", "query"}
 
 @app.route("/")
 def index():
-    return jsonify({
-        "status": "online",
-        "service": "BLACKBOX API",
-        "routes": ["/health", "/api/multisearch"]
-    })
+    return render_template("index.html")
 
 
 def get_headers():
