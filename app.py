@@ -6,7 +6,7 @@ import time
 import unicodedata
 
 import requests
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, request
 
 
 app = Flask(__name__)
@@ -17,7 +17,7 @@ history = []
 
 # Anti-429 : on limite les appels envoyés à Brixhub.
 CACHE_TTL_SECONDS = int(os.getenv("CACHE_TTL_SECONDS", "300"))
-MIN_SECONDS_BETWEEN_BRIXHUB_CALLS = float(os.getenv("MIN_SECONDS_BETWEEN_BRIXHUB_CALLS", "2.0"))
+MIN_SECONDS_BETWEEN_BRIXHUB_CALLS = float(os.getenv("MIN_SECONDS_BETWEEN_BRIXHUB_CALLS", "1.0"))
 MAX_MULTISEARCH_CALLS = int(os.getenv("MAX_MULTISEARCH_CALLS", "3"))
 MAX_SIMPLE_SEARCH_CALLS = int(os.getenv("MAX_SIMPLE_SEARCH_CALLS", "2"))
 MAX_PHONE_SEARCH_CALLS = int(os.getenv("MAX_PHONE_SEARCH_CALLS", "1"))
@@ -49,7 +49,11 @@ INTERNAL_PAYLOAD_KEYS = {"search_mode", "force_flexible", "mode", "query"}
 
 @app.route("/")
 def index():
-    return render_template("index.html")
+    return jsonify({
+        "status": "online",
+        "service": "BLACKBOX API",
+        "routes": ["/health", "/api/multisearch", "/api/search"]
+    })
 
 
 def get_headers():
@@ -699,6 +703,7 @@ def build_search_payloads(clean_data):
 
     return payloads[:MAX_MULTISEARCH_CALLS]
 
+
 def cache_key_for_payload(payload):
     cleaned = clean_payload(payload)
     return tuple(sorted((key, str(value)) for key, value in cleaned.items()))
@@ -1144,6 +1149,15 @@ def health():
 @app.route("/history")
 def get_history():
     return jsonify(history)
+
+
+@app.errorhandler(Exception)
+def handle_unexpected_error(error):
+    app.logger.exception("Erreur interne non gérée")
+    return jsonify({
+        "type": "error",
+        "message": f"Erreur interne API : {type(error).__name__}"
+    }), 500
 
 
 if __name__ == "__main__":
