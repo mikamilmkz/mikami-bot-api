@@ -23,7 +23,7 @@ def add_cors_headers(response):
 
 
 API_KEY = os.getenv("API_KEY")
-BASE_URL = os.getenv("BRIXHUB_BASE_URL", "https://brixhub.net/api/v1").rstrip("/")
+BASE_URL = os.getenv("BRIXHUB_BASE_URL", "https://brixhub.site/api/v1").rstrip("/")
 history = []
 
 # Anti-429 : on limite les appels envoyés à Brixhub.
@@ -1206,7 +1206,7 @@ from werkzeug.exceptions import HTTPException
 app = Flask(__name__)
 
 API_KEY = os.getenv("API_KEY")
-BASE_URL = os.getenv("BRIXHUB_BASE_URL", "https://brixhub.net/api/v1").rstrip("/")
+BASE_URL = os.getenv("BRIXHUB_BASE_URL", "https://brixhub.site/api/v1").rstrip("/")
 history = []
 
 # Anti-429 : on limite les appels envoyés à Brixhub.
