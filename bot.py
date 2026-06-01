@@ -24,7 +24,7 @@ def env_int(name, default):
 
 ADMIN_LOG_CHANNEL_ID = 1509730558685483108
 
-BASE_URL = os.getenv("BASE_URL", "https://mikami-justice.onrender.com").rstrip("/")
+BASE_URL = os.getenv("BASE_URL", "https://mikami-bot-api.onrender.com").rstrip("/")
 API_MULTI = f"{BASE_URL}/api/multisearch"
 LOGO_URL = f"{BASE_URL}/static/logo.png"
 BANNER_URL = f"{BASE_URL}/static/blackbox_banner.png"
